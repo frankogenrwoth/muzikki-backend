@@ -42,6 +42,7 @@ Desktop.ini
 /media/
 staticfiles/
 static/
+sample/
 
 # Coverage reports
 htmlcov/
