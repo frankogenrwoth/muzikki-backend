@@ -20,6 +20,13 @@ class Song(models.Model):
     )
     release_date = models.DateField(blank=True, null=True)
     tags = models.JSONField(default=list, blank=True)
+
+    play_count = models.PositiveIntegerField(default=0)
+    download_count = models.PositiveIntegerField(default=0)
+    like_count = models.PositiveIntegerField(default=0)
+    share_count = models.PositiveIntegerField(default=0)
+    visit_count = models.PositiveIntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -56,8 +63,8 @@ class Interaction(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="interactions"
     )
-    type = models.CharField(max_length=20, choices=InteractionType.choices)
+    interaction_type = models.CharField(max_length=20, choices=InteractionType.choices)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.username} {self.type} {self.song.title}"
+        return f"{self.user.username} {self.interaction_type} {self.song.title}"
