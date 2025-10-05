@@ -6,7 +6,9 @@ User = get_user_model()
 
 
 class Song(models.Model):
-    artist = models.ForeignKey(User, on_delete=models.CASCADE, related_name="songs")
+    artist = models.ManyToManyField(
+        User, related_name="songs", blank=True, through="SongCollaboration"
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     genre = models.CharField(max_length=100, blank=True, null=True)
@@ -26,6 +28,18 @@ class Song(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class SongCollaboration(models.Model):
+    song = models.ForeignKey(
+        Song, on_delete=models.CASCADE, related_name="collaborations"
+    )
+    artist = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="collaborations"
+    )
+    featured = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class Interaction(models.Model):
