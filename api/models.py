@@ -6,7 +6,7 @@ User = get_user_model()
 
 
 class Song(models.Model):
-    artist = models.ManyToManyField(
+    artists = models.ManyToManyField(
         User, related_name="songs", blank=True, through="SongCollaboration"
     )
     title = models.CharField(max_length=255)
