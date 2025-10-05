@@ -1,3 +1,61 @@
-.env 
-db.sqlite3 
-/.venv 
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Django
+*.log
+*.pot
+*.pyc
+*.pyo
+*.db
+*.sqlite3
+db.sqlite3
+
+# Environment
+.env
+.env.*
+.venv/
+venv/
+ENV/
+env/
+*.env
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Migrations
+**/migrations/
+!**/migrations/__init__.py
+
+# Media and static files
+/media/
+staticfiles/
+static/
+
+# Coverage reports
+htmlcov/
+.coverage
+.tox/
+.nox/
+.cache/
+.pytest_cache/
+coverage.xml
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# Other
+*.swp
+*.swo
