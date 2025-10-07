@@ -127,6 +127,37 @@ class ResetPasswordView(APIView):
         return Response({"detail": "Password reset successful"})
 
 
+class ActivateAccountView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        uidb64 = request.data.get("uid")
+        token = request.data.get("token")
+        if not uidb64 or not token:
+            return Response(
+                {"detail": "Missing uid or token"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except Exception:
+            return Response(
+                {"detail": "Invalid uid"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not default_token_generator.check_token(user, token):
+            return Response(
+                {"detail": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not user.is_active:
+            user.is_active = True
+            user.save()
+
+        return Response({"detail": "Account activated"})
+
+
 class UpdateProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UpdateProfileSerializer
 
