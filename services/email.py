@@ -3,6 +3,7 @@ from typing import Dict, Iterable, Mapping, Optional, Sequence, Tuple
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 
 
 def send_email(
@@ -61,16 +62,15 @@ class EmailBase:
         By default this renders from templates if provided. Subclasses can
         override to fully control construction.
         """
-        if not self.subject_template or not self.text_template:
+        if not self.subject_template or not self.html_template:
             raise NotImplementedError(
-                "Either provide subject_template and text_template or override build_content()"
+                "Either provide subject_template and html_template or override build_content()"
             )
 
         subject: str = render_to_string(self.subject_template, context).strip()
-        text_body: str = render_to_string(self.text_template, context)
-        html_body: Optional[str] = None
-        if self.html_template:
-            html_body = render_to_string(self.html_template, context)
+        html_body: str = render_to_string(self.html_template, context)
+        # Derive plain-text body from HTML so content is sourced from HTML
+        text_body: str = strip_tags(html_body)
         return subject, text_body, html_body
 
     def preview(self, context: Mapping[str, object]) -> Dict[str, Optional[str]]:
