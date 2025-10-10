@@ -18,6 +18,7 @@ from .serializers import (
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
     UpdateProfileSerializer,
+    CustomTokenObtainPairSerializer,
 )
 from services.email import send_email
 
@@ -42,6 +43,7 @@ class SignupView(generics.CreateAPIView):
 
 class LoginView(TokenObtainPairView):
     permission_classes = [permissions.AllowAny]
+    serializer_class = CustomTokenObtainPairSerializer
 
 
 class RefreshView(TokenRefreshView):
@@ -156,6 +158,37 @@ class ActivateAccountView(APIView):
             user.save()
 
         return Response({"detail": "Account activated"})
+
+
+class ResendActivationView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response(
+                {"detail": "Missing email"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Do not reveal user existence
+            return Response({"detail": "If the email exists, activation was sent."})
+
+        if user.is_active:
+            return Response({"detail": "Account already active"})
+
+        uid = urlsafe_base64_encode(str(user.pk).encode())
+        token = default_token_generator.make_token(user)
+
+        context = {"user": user, "uid": uid, "token": token}
+        subject = "Activate your account"
+        body = render_to_string("emails/activation.txt", context)
+        try:
+            send_email(to=email, subject=subject, body=body)
+        except Exception:
+            pass
+        return Response({"detail": "If the email exists, activation was sent."})
 
 
 class UpdateProfileView(generics.RetrieveUpdateAPIView):
