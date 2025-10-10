@@ -1,0 +1,78 @@
+Project: Muzikki Backend (Django + DRF)
+
+Purpose
+- Provide a secure, stable API for the Muzikki app, consumed by a Next.js frontend.
+- Integrate cleanly with NextAuth for sessions; social login will be added later.
+
+Architecture
+- Django 5 + Django REST Framework.
+- Custom user model: `authentication.User`.
+- JWT via `rest_framework_simplejwt` (access/refresh); NextAuth stores the tokens.
+- Email delivery using Django SMTP backend with env-provided credentials.
+
+Auth Decisions (approved)
+- Backend issues access/refresh JWT; NextAuth stores and forwards them to the API.
+- Unverified users ARE allowed to log in; frontend will restrict features until activation.
+- SMTP credentials come from environment variables.
+
+Key Endpoints (authentication/v1)
+- POST `auth/signup/`: create user; returns `{ user, access, refresh }`; sends activation email.
+- POST `auth/login/`: accepts `email` or `username` + `password`; returns `{ user, access, refresh }`.
+- POST `auth/refresh/`: refreshes/rotates tokens as configured.
+- POST `auth/logout/`: blacklists provided refresh token.
+- POST `auth/forgot-password/`: sends password reset email; silent on unknown email.
+- POST `auth/reset-password/`: resets password with `uid` + `token`.
+- POST `auth/activate/`: activates account with `uid` + `token`.
+- POST `auth/activate/resend/`: resends activation email; silent on unknown email; no PII leaks.
+
+Frontend Integration
+- NextAuth Credentials provider flow:
+  - signIn → POST `/auth/login/` → store `access`/`refresh` in NextAuth JWT.
+  - token refresh → POST `/auth/refresh/` as needed.
+  - signOut → POST `/auth/logout/` with `refresh` token.
+- Activation link format: `${FRONTEND_URL}/auth/activate?uid=...&token=...`.
+- Frontend should gate features if `user.is_active` is false.
+
+Environment Variables
+- Required:
+  - `SECRET_KEY`
+  - `DEFAULT_FROM_EMAIL`
+  - `EMAIL_HOST_USER`
+  - `EMAIL_HOST_PASSWORD`
+  - `FRONTEND_URL` (e.g., `https://app.muzikki.com`)
+- Optional:
+  - `DEBUG`, `ALLOWED_HOSTS`
+
+Coding Standards
+- DRF: clear serializers, thin views, explicit responses.
+- Descriptive names; prefer early returns; avoid unnecessary try/except.
+- Only comment non-obvious rationale, invariants, security/perf caveats.
+- Keep formatting consistent; do not reformat unrelated code.
+
+Security & Privacy
+- Never reveal user existence in email-driven endpoints.
+- Always use Django password validators and `set_password`.
+- JWT: short-lived access, rotated refresh, blacklist after rotation.
+- Do not log secrets, tokens, or PII.
+
+Testing
+- Unit tests for serializers and token issuance.
+- Integration tests for signup/login/reset/activate, including invalid/expired tokens.
+
+Operational Notes
+- Email sending respects Django `EMAIL_*` settings; failures can be silenced in dev.
+- Future roadmap: social login (Google/Apple), email change verification, device/session mgmt, throttling.
+
+Repository Pointers
+- User model: `authentication/models.py`
+- Serializers: `authentication/v1/serializers.py`
+- Views/URLs: `authentication/v1/views.py`, `authentication/v1/urls.py`
+- Email service: `services/email.py`
+- Settings: `backend/settings.py`
+
+Agent Guidelines
+- Do: keep endpoint contracts and payloads stable.
+- Do: write test cases for different features added (100% test coverage)
+- Do: use env variables for config and URLs; no hardcoding secrets.
+- Don’t: block login for inactive users (frontend gates features).
+- Don’t: leak user existence in responses for email flows.
