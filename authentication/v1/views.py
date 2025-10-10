@@ -30,15 +30,21 @@ class SignupView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        user = User.objects.get(pk=response.data.get("id"))
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
         tokens = RefreshToken.for_user(user)
-        response.data = {
-            "user": UserSerializer(user).data,
-            "access": str(tokens.access_token),
-            "refresh": str(tokens),
-        }
-        return response
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                "user": UserSerializer(user).data,
+                "access": str(tokens.access_token),
+                "refresh": str(tokens),
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
 class LoginView(TokenObtainPairView):
