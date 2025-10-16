@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
+from django.conf import settings
+from django.utils import timezone
 
 
 class UserQuerySet(models.QuerySet):
@@ -53,3 +55,37 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class AuthEvent(models.Model):
+    """Security event for authentication activities.
+
+    Stores minimal, non-sensitive metadata for monitoring failed logins and lockouts.
+    """
+
+    TYPE_FAILED_LOGIN = "failed_login"
+    TYPE_LOCKOUT = "lockout"
+
+    EVENT_TYPES = (
+        (TYPE_FAILED_LOGIN, "Failed Login"),
+        (TYPE_LOCKOUT, "Lockout"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    identifier = models.CharField(max_length=255, help_text="email or username used")
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, null=True)
+    event_type = models.CharField(max_length=32, choices=EVENT_TYPES)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["identifier", "created_at"]),
+            models.Index(fields=["event_type", "created_at"]),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} {self.identifier} {self.ip} {self.created_at.isoformat()}"

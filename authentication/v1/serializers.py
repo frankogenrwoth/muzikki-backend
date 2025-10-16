@@ -5,6 +5,17 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
+from authentication.utils import (
+    get_client_ip,
+    get_attempts,
+    increment_attempts,
+    reset_attempts,
+    is_in_cooldown,
+    is_locked,
+    lock_account,
+)
+from django.conf import settings
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -132,6 +143,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         username = attrs.get(self.username_field)
         password = attrs.get("password")
 
+        # Request context for IP and user-agent
+        request = self.context.get("request")
+
         user = None
         if email:
             try:
@@ -144,12 +158,123 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             except User.DoesNotExist:
                 pass
 
-        if user is None or not user.check_password(password):
-            raise serializers.ValidationError(
-                {"detail": "No active account found with the given credentials"}
-            )
+        # Build identifier for tracking (avoid revealing existence)
+        identifier = (email or username or "unknown").lower()
+        ip = get_client_ip(request) if request is not None else "0.0.0.0"
+        user_agent = None
+        if request is not None:
+            user_agent = request.META.get("HTTP_USER_AGENT")
 
-        # Do NOT block inactive users; generate tokens regardless
+        # Lazy import to avoid circulars
+        from authentication.models import AuthEvent
+
+        # Check lock/cooldown first
+        if is_locked(identifier):
+            # Log lock state hit
+            AuthEvent.objects.create(
+                user=user if user and user.is_authenticated else None,
+                identifier=identifier,
+                ip=ip,
+                user_agent=user_agent,
+                event_type=AuthEvent.TYPE_LOCKOUT,
+            )
+            from authentication.utils import AccountLockedError
+
+            raise AccountLockedError()
+        if is_in_cooldown(identifier, ip):
+            # Log failed attempt under cooldown
+            AuthEvent.objects.create(
+                user=user if user and user.is_authenticated else None,
+                identifier=identifier,
+                ip=ip,
+                user_agent=user_agent,
+                event_type=AuthEvent.TYPE_FAILED_LOGIN,
+            )
+            from authentication.utils import CooldownError
+
+            raise CooldownError()
+
+        # Constant-time password check path; if user missing, simulate check duration
+        password_ok = False
+        if user is not None:
+            password_ok = user.check_password(password)
+        else:
+            # Dummy work to reduce timing side channel
+            from django.contrib.auth.hashers import make_password
+
+            make_password(password)
+
+        if not password_ok:
+            attempts = increment_attempts(identifier, ip)
+
+            # Lockout if threshold reached
+            from django.conf import settings as dj_settings
+
+            cfg = getattr(dj_settings, "LOGIN_SECURITY", {})
+            lock_after = int(cfg.get("LOCK_AFTER", 5))
+            cooldown_after = int(cfg.get("COOLDOWN_AFTER", 3))
+
+            # TODO: logging handled in view/model later
+
+            if attempts >= lock_after:
+                lock_account(identifier)
+
+                # Log lockout
+                AuthEvent.objects.create(
+                    user=user if user else None,
+                    identifier=identifier,
+                    ip=ip,
+                    user_agent=user_agent,
+                    event_type=AuthEvent.TYPE_LOCKOUT,
+                )
+
+                # Send email notification if we know the user
+                if user and user.email:
+                    try:
+                        from services.email import send_email
+
+                        subject = "Unusual activity on your account"
+                        body = (
+                            "We noticed multiple unsuccessful login attempts to your account.\n\n"
+                            "If this wasn't you, please reset your password."
+                        )
+                        send_email(to=user.email, subject=subject, body=body)
+                    except Exception:
+                        # Do not fail auth flow due to email errors
+                        pass
+
+                from authentication.utils import AccountLockedError
+
+                # Neutral message but clear lockout
+                raise AccountLockedError()
+            if attempts >= cooldown_after:
+                # Log failed under cooldown threshold
+                AuthEvent.objects.create(
+                    user=user if user else None,
+                    identifier=identifier,
+                    ip=ip,
+                    user_agent=user_agent,
+                    event_type=AuthEvent.TYPE_FAILED_LOGIN,
+                )
+                from authentication.utils import CooldownError
+
+                raise CooldownError()
+
+            # Log generic failed attempt
+            AuthEvent.objects.create(
+                user=user if user else None,
+                identifier=identifier,
+                ip=ip,
+                user_agent=user_agent,
+                event_type=AuthEvent.TYPE_FAILED_LOGIN,
+            )
+            from authentication.utils import InvalidCredentialsError
+
+            raise InvalidCredentialsError()
+
+        # Success: reset attempts and do NOT block inactive users; generate tokens regardless
+        reset_attempts(identifier, ip)
+        # Optionally log success? We skip to reduce noise
         data = {}
         refresh = self.get_token(user)
 

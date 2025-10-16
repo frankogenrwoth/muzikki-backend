@@ -166,3 +166,26 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
+
+# Caching (prefer Redis if REDIS_URL provided)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",
+    }
+}
+
+REDIS_URL = os.getenv("REDIS_URL")
+if REDIS_URL:
+    CACHES["default"] = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+
+# Login security thresholds (env-overridable)
+LOGIN_SECURITY = {
+    "FAILED_WINDOW_MIN": int(os.getenv("LOGIN_FAILED_WINDOW_MIN", "10")),
+    "COOLDOWN_AFTER": int(os.getenv("LOGIN_COOLDOWN_AFTER", "3")),
+    "LOCK_AFTER": int(os.getenv("LOGIN_LOCK_AFTER", "5")),
+    "LOCK_DURATION_MIN": int(os.getenv("LOGIN_LOCK_DURATION_MIN", "15")),
+}
