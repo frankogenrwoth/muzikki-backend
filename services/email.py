@@ -44,7 +44,7 @@ class EmailBase:
     def __init__(self) -> None:
         # Load commonly used configuration lazily from Django settings.
         self._from_email = self.default_from_email or getattr(
-            settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"
+            settings, "DEFAULT_FROM_EMAIL", "no-reply@muzikki.com"
         )
 
     def validate_context(self, context: Mapping[str, object]) -> None:
