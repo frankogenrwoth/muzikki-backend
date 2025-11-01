@@ -23,7 +23,6 @@ Key Endpoints (authentication/v1)
 - POST `auth/forgot-password/`: sends password reset email; silent on unknown email.
 - POST `auth/reset-password/`: resets password with `uid` + `token`.
 - POST `auth/activate/`: activates account with `uid` + `token`.
-- POST `auth/activate/resend/`: resends activation email; silent on unknown email; no PII leaks.
 
 Frontend Integration
 - NextAuth Credentials provider flow:

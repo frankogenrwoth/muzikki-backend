@@ -21,6 +21,9 @@ from .serializers import (
     CustomTokenObtainPairSerializer,
 )
 from services.email import send_email
+from django.contrib.auth import login as django_login
+from django.http import HttpResponseRedirect
+import os
 
 User = get_user_model()
 
@@ -34,13 +37,11 @@ class SignupView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        tokens = RefreshToken.for_user(user)
         headers = self.get_success_headers(serializer.data)
         return Response(
             {
                 "user": UserSerializer(user).data,
-                "access": str(tokens.access_token),
-                "refresh": str(tokens),
+                "detail": "Account created. Check your email to activate your account.",
             },
             status=status.HTTP_201_CREATED,
             headers=headers,
@@ -164,6 +165,55 @@ class ActivateAccountView(APIView):
             user.save()
 
         return Response({"detail": "Account activated"})
+
+    def get(self, request):
+        """Handle activation links clicked from email.
+
+        Expected query params: uid, token
+        On success: activate user, create a server session (login) and
+        redirect to the listener frontend.
+        On failure: redirect to listener frontend error page with reason.
+        """
+        uidb64 = request.GET.get("uid")
+        token = request.GET.get("token")
+        listener_url = os.getenv("LISTENER_FRONTEND_URL") or os.getenv(
+            "FRONTEND_URL", "http://localhost:3000"
+        )
+        success_path = os.getenv("LISTENER_AFTER_ACTIVATION_PATH", "/")
+        error_path = os.getenv("LISTENER_ACTIVATION_ERROR_PATH", "/activation-error")
+
+        def redirect_success():
+            return HttpResponseRedirect(f"{listener_url.rstrip('/')}{success_path}")
+
+        def redirect_error(reason="invalid"):
+            return HttpResponseRedirect(
+                f"{listener_url.rstrip('/')}{error_path}?reason={reason}"
+            )
+
+        if not uidb64 or not token:
+            return redirect_error("missing")
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except Exception:
+            return redirect_error("invalid_uid")
+
+        if not default_token_generator.check_token(user, token):
+            return redirect_error("invalid_token")
+
+        if not user.is_active:
+            user.is_active = True
+            user.save()
+
+        # Log the user in to create a server-side session cookie
+        try:
+            django_login(request, user)
+        except Exception:
+            # If login fails for some reason, still redirect to success page
+            return redirect_success()
+
+        return redirect_success()
 
 
 class ResendActivationView(APIView):
